@@ -1,0 +1,4 @@
+private-not-for-github/
+.env
+.env.*
+.DS_Store

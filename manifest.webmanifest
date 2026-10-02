@@ -1,1 +1,9 @@
-{"name":"MS Matematika — Milliy Sertifikat","short_name":"MS Matematika","start_url":"./","display":"standalone","background_color":"#06111f","theme_color":"#06111f","lang":"uz","description":"Matematika Milliy Sertifikat testlari, javoblari va natija tahlili."}
+{
+  "name": "MSmatematika",
+  "short_name": "MSmatematika",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#0b1220",
+  "description": "Matematika Milliy sertifikat test platformasi"
+}

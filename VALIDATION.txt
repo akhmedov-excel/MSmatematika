@@ -1,0 +1,42 @@
+MSmatematika production validation
+
+SOURCE DATA
+- Answer source: kitobni javoblari(3).docx -> previously validated structured dataset
+- Variants: 20
+- Closed keys: 700 (35 x 20)
+- Open parent questions: 200 (10 x 20)
+- Open subpart keys: 400 (a/b)
+- Total protected answer-key rows: 1100
+- Rasch response items per attempt: 55
+- Test time: 150 minutes
+
+PUBLIC SECURITY
+- Public frontend contains no real answer-key dataset: PASS
+- Real answer-key seed is separated under private-not-for-github/: PASS
+- .gitignore excludes private-not-for-github/: PASS
+- Browser has no direct SELECT permission on answer_keys: PASS by schema design
+- Student history has SELECT-only RLS; no UPDATE/DELETE policy: PASS by schema design
+- Answer-key unlock is server-side and requires completed attempt for same user+variant: PASS by function design
+
+CODE
+- assets/js/app.js: node --check PASS
+- assets/js/admin.js: node --check PASS
+- Static HTTP root response: PASS
+
+UX
+- Night-only calm palette
+- Responsive home, variants, test, history, answers, help
+- 45-question navigator
+- Local autosave and persistent countdown deadline
+- MathLive input + KaTeX display
+- Required surname/name/phone at submit
+- Immutable history UI
+- Admin summary page
+
+REMAINING DEPLOY-TIME CONFIG (not code defects)
+- Create/connect Supabase project
+- Run schema + PRIVATE seed
+- Deploy Edge Functions
+- Put Supabase URL + anon key in assets/js/config.js
+- Create admin auth user
+- Final browser regression after live backend is connected

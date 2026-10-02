@@ -1,0 +1,3 @@
+Real javob kalitlari ataylab ushbu public paketga kiritilmagan.
+GitHub main uchun aynan shu paketdan foydalaning.
+Backendga javob kalitlarini kiritish uchun alohida PRIVATE setup paketidan foydalaning.
