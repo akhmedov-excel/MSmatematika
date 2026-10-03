@@ -51,7 +51,8 @@ create table if not exists public.answer_keys (
   answer_type text not null check (answer_type in ('choice','math')),
   answer_raw text not null,
   display_latex text,
-  check_mode text not null default 'equivalent' check (check_mode in ('equivalent','exact')),
+  check_mode text not null default 'equivalent'
+    check (check_mode in ('equivalent','exact')),
   unique nulls not distinct (variant, question_num, subpart)
 );
 

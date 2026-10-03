@@ -1,6 +1,6 @@
 window.MSM_CONFIG = Object.freeze({
-  supabaseUrl: "REPLACE_WITH_SUPABASE_URL",
-  supabaseAnonKey: "REPLACE_WITH_SUPABASE_ANON_KEY",
+  supabaseUrl: " https://oxgnjsgncfhoierwyvtj.supabase.co",
+  supabaseAnonKey: "sb_publishable_qdvI7zXcbZRbPXhh_SrZaQ_xy0HXxa5",
   siteName: "MSmatematika",
   testMinutes: 150,
   totalVariants: 20,
