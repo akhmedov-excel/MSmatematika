@@ -1,13 +1,151 @@
 (() => {
   'use strict';
-  const cfg=window.MSM_CONFIG, root=document.getElementById('adminApp'), toasts=document.getElementById('toastRegion');
-  const esc=(v='')=>String(v).replace(/[&<>'"]/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
-  const ready=()=>cfg.supabaseUrl&&!cfg.supabaseUrl.startsWith('REPLACE_')&&cfg.supabaseAnonKey&&!cfg.supabaseAnonKey.startsWith('REPLACE_');
-  const toast=(m,t='')=>{const e=document.createElement('div');e.className=`toast ${t}`;e.textContent=m;toasts.appendChild(e);setTimeout(()=>e.remove(),4000)};
-  let sb=null;
-  function loginView(){root.innerHTML=`<section class="admin-login card"><span class="eyebrow">Admin</span><h1 style="font-size:2rem">Boshqaruv paneli</h1><p class="muted">Admin email va parol bilan kiring.</p><div class="form-group section"><label>Email</label><input class="input" id="email" type="email"></div><div class="form-group section"><label>Parol</label><input class="input" id="password" type="password"></div><button class="btn btn-primary section" id="loginBtn">Kirish</button></section>`;document.getElementById('loginBtn').onclick=login;}
-  async function login(){const email=document.getElementById('email').value.trim(),password=document.getElementById('password').value;const {error}=await sb.auth.signInWithPassword({email,password});if(error)return toast(error.message,'error');await dashboard();}
-  async function invoke(name,body={}){const {data,error}=await sb.functions.invoke(name,{body});if(error)throw error;if(data?.error)throw new Error(data.error);return data;}
-  async function dashboard(){root.innerHTML='<div class="skeleton"></div>';try{const d=await invoke('admin-summary');const rows=(d.variants||[]).map(v=>`<tr><td>${v.variant}</td><td>${v.attempts}</td><td>${v.avgParent==null?'—':Number(v.avgParent).toFixed(1)}</td><td>${v.avgMs==null?'—':Number(v.avgMs).toFixed(1)}</td><td>${v.raschStatus||'—'}</td></tr>`).join('');root.innerHTML=`<section><div class="toolbar"><div><span class="eyebrow">Admin panel</span><h1 style="font-size:2rem;margin:.3rem 0">Dashboard</h1></div><button class="btn btn-secondary" id="logout">Chiqish</button></div><div class="admin-kpis"><div class="result-box"><span>Foydalanuvchilar</span><strong>${d.totalUsers||0}</strong></div><div class="result-box"><span>Jami testlar</span><strong>${d.totalAttempts||0}</strong></div><div class="result-box"><span>Bugungi testlar</span><strong>${d.todayAttempts||0}</strong></div><div class="result-box"><span>Variantlar</span><strong>20</strong></div></div><div class="section card"><h3>Variantlar statistikasi</h3><div class="table-wrap section"><table class="table"><thead><tr><th>Variant</th><th>Ishlaganlar</th><th>O‘rtacha /45</th><th>O‘rtacha MS</th><th>Rasch holati</th></tr></thead><tbody>${rows}</tbody></table></div></div></section>`;document.getElementById('logout').onclick=async()=>{await sb.auth.signOut();loginView()};}catch(e){root.innerHTML=`<div class="notice danger"><div>!</div><div>${esc(e.message)}</div></div>`}}
-  (async()=>{if(!ready()||!window.supabase){root.innerHTML='<div class="notice warn"><div>!</div><div>Supabase sozlanmagan. assets/js/config.js faylini to‘ldiring.</div></div>';return;}sb=window.supabase.createClient(cfg.supabaseUrl,cfg.supabaseAnonKey);const {data:{session}}=await sb.auth.getSession();session?dashboard():loginView();})();
+  const cfg = window.MSM_CONFIG;
+  const root = document.getElementById('adminApp');
+  const toasts = document.getElementById('toastRegion');
+
+  const esc = (v = '') => String(v).replace(/[&<>'"]/g, ch => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+  }[ch]));
+
+  const ready = () => cfg?.supabaseUrl && !cfg.supabaseUrl.startsWith('REPLACE_') &&
+    cfg?.supabaseAnonKey && !cfg.supabaseAnonKey.startsWith('REPLACE_');
+
+  const toast = (m, t = '') => {
+    const e = document.createElement('div');
+    e.className = `toast ${t}`;
+    e.textContent = m;
+    toasts.appendChild(e);
+    setTimeout(() => e.remove(), 4000);
+  };
+
+  let sb = null;
+
+  function loginView(message = '') {
+    root.innerHTML = `
+      <section class="admin-login card">
+        <span class="eyebrow">Admin</span>
+        <h1 style="font-size:2rem">Boshqaruv paneli</h1>
+        <p class="muted">Faqat ruxsat berilgan administrator email va parol bilan kirishi mumkin.</p>
+        ${message ? `<div class="notice warn section"><div>!</div><div>${esc(message)}</div></div>` : ''}
+        <div class="form-group section">
+          <label>Email</label>
+          <input class="input" id="email" type="email" autocomplete="username">
+        </div>
+        <div class="form-group section">
+          <label>Parol</label>
+          <input class="input" id="password" type="password" autocomplete="current-password">
+        </div>
+        <button class="btn btn-primary section" id="loginBtn">Kirish</button>
+      </section>`;
+    document.getElementById('loginBtn').onclick = login;
+    document.getElementById('password').addEventListener('keydown', e => {
+      if (e.key === 'Enter') login();
+    });
+  }
+
+  async function login() {
+    const email = document.getElementById('email').value.trim();
+    const password = document.getElementById('password').value;
+    if (!email || !password) return toast('Email va parolni kiriting.', 'error');
+
+    const { data: { session } } = await sb.auth.getSession();
+    if (session?.user?.is_anonymous) {
+      await sb.auth.signOut({ scope: 'local' });
+    }
+
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) return toast(error.message, 'error');
+    await dashboard();
+  }
+
+  async function invoke(name, body = {}) {
+    const { data, error } = await sb.functions.invoke(name, { body });
+    if (error) {
+      let message = error.message || 'Edge Function xatosi.';
+      try {
+        const response = error.context;
+        if (response && typeof response.json === 'function') {
+          const payload = await response.json();
+          if (payload?.error) message = payload.error;
+        }
+      } catch (_) {}
+      const err = new Error(message);
+      err.status = error?.context?.status;
+      throw err;
+    }
+    if (data?.error) throw new Error(data.error);
+    return data;
+  }
+
+  async function dashboard() {
+    root.innerHTML = '<div class="skeleton"></div>';
+    try {
+      const d = await invoke('admin-summary');
+      const rows = (d.variants || []).map(v => `
+        <tr>
+          <td>${v.variant}</td>
+          <td>${v.attempts}</td>
+          <td>${v.avgParent == null ? '—' : Number(v.avgParent).toFixed(1)}</td>
+          <td>${v.avgMs == null ? '—' : Number(v.avgMs).toFixed(1)}</td>
+          <td>${v.raschStatus || '—'}</td>
+        </tr>`).join('');
+
+      root.innerHTML = `
+        <section>
+          <div class="toolbar">
+            <div>
+              <span class="eyebrow">Admin panel</span>
+              <h1 style="font-size:2rem;margin:.3rem 0">Dashboard</h1>
+            </div>
+            <button class="btn btn-secondary" id="logout">Chiqish</button>
+          </div>
+          <div class="admin-kpis">
+            <div class="result-box"><span>Foydalanuvchilar</span><strong>${d.totalUsers || 0}</strong></div>
+            <div class="result-box"><span>Jami testlar</span><strong>${d.totalAttempts || 0}</strong></div>
+            <div class="result-box"><span>Bugungi testlar</span><strong>${d.todayAttempts || 0}</strong></div>
+            <div class="result-box"><span>Variantlar</span><strong>20</strong></div>
+          </div>
+          <div class="section card">
+            <h3>Variantlar statistikasi</h3>
+            <div class="table-wrap section">
+              <table class="table">
+                <thead><tr><th>Variant</th><th>Ishlaganlar</th><th>O‘rtacha /45</th><th>O‘rtacha MS</th><th>Rasch holati</th></tr></thead>
+                <tbody>${rows}</tbody>
+              </table>
+            </div>
+          </div>
+        </section>`;
+
+      document.getElementById('logout').onclick = async () => {
+        await sb.auth.signOut({ scope: 'local' });
+        loginView();
+      };
+    } catch (e) {
+      const msg = String(e?.message || '');
+      if (/Admin huquqi yo.q|Avtorizatsiya talab qilinadi|non-2xx|401|403/i.test(msg)) {
+        await sb.auth.signOut({ scope: 'local' });
+        loginView('Admin hisobingiz bilan kiring.');
+        return;
+      }
+      root.innerHTML = `<div class="notice danger"><div>!</div><div>${esc(msg || 'Server xatosi.')}</div></div>`;
+    }
+  }
+
+  (async () => {
+    if (!ready() || !window.supabase) {
+      root.innerHTML = '<div class="notice warn"><div>!</div><div>Supabase sozlanmagan. assets/js/config.js faylini to‘ldiring.</div></div>';
+      return;
+    }
+
+    sb = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+    const { data: { session } } = await sb.auth.getSession();
+
+    if (!session || session.user?.is_anonymous) {
+      loginView();
+      return;
+    }
+
+    await dashboard();
+  })();
 })();
