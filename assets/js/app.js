@@ -17,7 +17,8 @@
     timerId: null,
     submitting: false,
     history: [],
-    unlockedVariants: []
+    unlockedVariants: [],
+    backendError: null
   };
 
   const html = (s) => s;
@@ -59,17 +60,22 @@
   mainNav?.addEventListener('click', () => mainNav.classList.remove('open'));
 
   async function initSupabase(){
-    if (!backendReady() || !window.supabase) return;
+    if (!backendReady()) throw new Error('Supabase konfiguratsiyasi topilmadi.');
+    if (!window.supabase) throw new Error('Supabase JavaScript kutubxonasi yuklanmadi.');
     state.supabase = window.supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, {
       auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: false }
     });
-    let { data: { session } } = await state.supabase.auth.getSession();
+    const current = await state.supabase.auth.getSession();
+    if (current.error) throw current.error;
+    let session = current.data.session;
     if (!session) {
       const { data, error } = await state.supabase.auth.signInAnonymously();
       if (error) throw error;
       session = data.session;
     }
-    state.user = session?.user || null;
+    if (!session?.user) throw new Error('Anonim foydalanuvchi sessiyasi yaratilmadi.');
+    state.user = session.user;
+    state.backendError = null;
   }
 
   function routeInfo(){
@@ -87,9 +93,11 @@
   }
 
   function renderMath(latex){
-    const src = String(latex ?? '').replace(/^\$+|\$+$/g, '').trim();
+    let src = String(latex ?? '').replace(/\$/g, '').trim();
+    // Seed/SQL orqali ikki marta escape bo'lgan LaTeX buyruqlarini bitta backslashga qaytaramiz.
+    while (src.includes('\\\\')) src = src.replaceAll('\\\\', '\\');
     if (!src) return '—';
-    try { return window.katex ? window.katex.renderToString(src, {throwOnError:false, displayMode:false}) : esc(src); }
+    try { return window.katex ? window.katex.renderToString(src, {throwOnError:false, displayMode:false, strict:'ignore'}) : esc(src); }
     catch { return esc(src); }
   }
 
@@ -148,9 +156,7 @@
 
   async function fetchHistory(){
     if(!state.supabase || !state.user) {
-      try { state.history = JSON.parse(localStorage.getItem(localHistoryKey) || '[]'); } catch { state.history=[]; }
-      state.unlockedVariants = [...new Set(state.history.filter(x=>x.status==='completed').map(x=>x.variant))];
-      return state.history;
+      throw new Error(state.backendError || 'Server bilan xavfsiz sessiya o‘rnatilmadi. Sahifani yangilang yoki keyinroq urinib ko‘ring.');
     }
     const { data, error } = await state.supabase.from('attempts')
       .select('id,variant,started_at,submitted_at,duration_seconds,parent_correct,item_correct,item_total,rasch_theta,ms_score,level,rasch_status')
@@ -311,14 +317,8 @@
     try{
       const duration=Math.max(0,Math.min(cfg.testMinutes*60,Math.round((Date.now()-Date.parse(state.draft.startedAt))/1000)));
       const payload={variant:state.draft.variant,student:{surname,firstName,phone},startedAt:state.draft.startedAt,submittedAt:nowIso(),durationSeconds:duration,answers:state.draft.answers};
-      let result;
-      if(state.supabase){ result=await apiFunction('submit-attempt',payload); }
-      else {
-        result={attemptId:`local-${Date.now()}`,variant:payload.variant,parentCorrect:null,itemCorrect:null,itemTotal:55,msScore:null,level:null,raschStatus:'backend_required',durationSeconds:duration};
-        const local=JSON.parse(localStorage.getItem(localHistoryKey)||'[]');
-        local.unshift({id:result.attemptId,variant:payload.variant,submitted_at:payload.submittedAt,duration_seconds:duration,parent_correct:null,item_correct:null,item_total:55,ms_score:null,level:null,rasch_status:'backend_required',status:'completed'});
-        localStorage.setItem(localHistoryKey,JSON.stringify(local));
-      }
+      if(!state.supabase || !state.user) throw new Error(state.backendError || 'Server bilan sessiya o‘rnatilmagan. Natija lokal saqlanmaydi.');
+      const result=await apiFunction('submit-attempt',payload);
       clearDraft(state.draft.variant); closeModal(); await showResult(result);
     }catch(err){toast(err.message||'Natijani yuborishda xatolik yuz berdi.','error');}
     finally{state.submitting=false;qsa('.modal-actions button').forEach(b=>b.disabled=false);}
@@ -339,7 +339,6 @@
       </div>
       <div class="section notice"><div>ⓘ</div><div><strong>${statusText}.</strong> MS ko‘rsatkichi variant bo‘yicha yig‘ilgan javoblar asosida hisoblanadi. Platformadagi MS rasmiy sertifikat bali emas.</div></div>
       <div class="hero-actions section"><a class="btn btn-primary" href="#/answers?variant=${r.variant}">Javob kalitini ko‘rish</a><a class="btn btn-secondary" href="#/history">Mening tarixim</a><a class="btn btn-secondary" href="#/variants">Boshqa variant</a></div>
-      ${!state.supabase?'<div class="notice warn section"><div>!</div><div><strong>Backend ulanmagan.</strong> Dizayn va test oqimi ishlaydi, ammo haqiqiy tekshirish uchun Supabase sozlamalarini ulash kerak.</div></div>':''}
     </section>`;
     history.replaceState(null,'',`#/result?variant=${r.variant}`);
   }
@@ -361,7 +360,7 @@
       await fetchHistory();
       if(!state.unlockedVariants.length){app.innerHTML=`<section><div class="section-head"><div><h1 style="font-size:2rem;margin:0">Javob kalitlari</h1><p>Kalit test yakunlangandan keyin ochiladi.</p></div></div><div class="empty">Hali hech bir variant kaliti ochilmagan.<div class="hero-actions" style="justify-content:center"><a class="btn btn-primary" href="#/variants">Test boshlash</a></div></div></section>`;return;}
       const v = requested && state.unlockedVariants.includes(requested) ? requested : state.unlockedVariants[0];
-      if(!state.supabase){ app.innerHTML=`<section><div class="section-head"><div><h1 style="font-size:2rem;margin:0">Javob kalitlari</h1></div></div><div class="notice warn"><div>!</div><div>Javob kalitlari xavfsizlik sababli public fayllarga kiritilmagan. Supabase backend ulangach, faqat ishlangan variant kaliti serverdan olinadi.</div></div></section>`; return; }
+      if(!state.supabase || !state.user) throw new Error(state.backendError || 'Server bilan xavfsiz sessiya o‘rnatilmadi.');
       const data=await apiFunction('get-answer-key',{variant:v});
       const choices=data.answers.filter(x=>x.question<=35).map(x=>`<div class="answer-row"><strong>${x.question}</strong><div>${esc(x.answer)}</div></div>`).join('');
       const open=[]; for(let n=36;n<=45;n++){const parts=data.answers.filter(x=>x.question===n);open.push(`<div class="answer-row"><strong>${n}</strong><div class="answer-parts">${parts.map(p=>`<div class="answer-part"><span>${p.subpart})</span>${renderMath(p.displayLatex||p.answer)}</div>`).join('')}</div></div>`)}
@@ -400,7 +399,12 @@
 
   (async()=>{
     try{ await initSupabase(); }
-    catch(err){ toast('Supabase ulanishida xatolik: '+err.message,'error'); }
+    catch(err){
+      state.backendError = 'Supabase ulanishida xatolik: ' + (err?.message || 'noma’lum xato');
+      state.supabase = null;
+      state.user = null;
+      toast(state.backendError,'error');
+    }
     await router();
   })();
 })();

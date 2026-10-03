@@ -6,6 +6,8 @@ const json=(body:any,status=200)=>new Response(JSON.stringify(body),{status,head
 
 function normalizeLatex(src:string){
   let s=String(src??'').trim().replace(/\$/g,'').replace(/,/g,'.').replace(/−/g,'-').replace(/×/g,'*').replace(/÷/g,'/');
+  // SQL seedda ikki marta escape bo'lgan LaTeX buyruqlarini normallashtirish.
+  while (s.includes('\\\\')) s = s.replaceAll('\\\\', '\\');
   s=s.replace(/\\left|\\right/g,'').replace(/\\cdot|\\times/g,'*').replace(/\\pi/g,'pi').replace(/°/g,'deg');
   let prev='';
   const frac=/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g;
