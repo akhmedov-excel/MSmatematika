@@ -1,5 +1,5 @@
 window.MSM_CONFIG = Object.freeze({
-  supabaseUrl: " https://oxgnjsgncfhoierwyvtj.supabase.co",
+  supabaseUrl: "https://oxgnjsgncfhoierwyvtj.supabase.co",
   supabaseAnonKey: "sb_publishable_qdvI7zXcbZRbPXhh_SrZaQ_xy0HXxa5",
   siteName: "MSmatematika",
   testMinutes: 150,
